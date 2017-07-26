@@ -1,11 +1,14 @@
 from flask import Flask, request, jsonify, render_template, session, g, redirect, url_for, abort, flash, json
 from flask_restful import Resource, Api, reqparse
 from flaskext.mysql import MySQL
+from flask_login import LoginManager, login_required, login_user, logout_user
 from contextlib import closing
 import os
 import mysql.connector
 from mysql.connector import Error
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+
 
 mysql = MySQL()
 app = Flask(__name__)
@@ -16,6 +19,24 @@ app.config['MYSQL_DATABASE_HOST'] = 'localhost'
 app.config['MYSQL_DATABASE_DB'] = 'aso_ebi'
 app.config['MYSQL_DATABASE_PORT'] = 3306
 mysql.init_app(app)
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = '/login'
+
+app.config['UPLOAD_FOLDER1'] = '/home/jimi/PycharmProjects/Aso-Ebi_App/static/uploads'
+app.config['UPLOAD_FOLDER2'] = '/home/jimi/PycharmProjects/Aso-Ebi_App/static/merchandise'
+ALLOWED_EXTENSIONS = set(['png', 'jpg', 'jpeg'])
+
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1] in ALLOWED_EXTENSIONS
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.get(user_id)
 
 
 @app.route("/")
@@ -49,7 +70,7 @@ def create_account():
         return jsonify({'error', str(e)})
 
 
-@app.route('/login', methods=['POST', 'GET'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
     try:
         if request.method == 'POST':
@@ -58,12 +79,13 @@ def login():
             password = entry['password']
             conn = mysql.connect()
             cursor = conn.cursor()
-            query = "Select username, password from users where username = %s"
+            query = "Select username, password, user_id from users where username = %s"
             args = username
             cursor.execute(query, args)
             data = cursor.fetchall()
             if len(data) > 0:
                 if check_password_hash(str(data[0][1]), password):
+                    login_user(username)
                     return jsonify('login confirmed')
                     cursor.close()
                     conn.close()
@@ -74,21 +96,27 @@ def login():
         else:
             return jsonify({'error: incorrect method'})
     except Exception as e:
+        print e
         return jsonify({'error', str(e)})
 
 
-@app.route('/UploadProfilePhoto', methods='POST')
+@app.route('/UploadProfilePhoto', methods=['GET', 'POST'])
 def upload_profile_photo():
     try:
         if request.method == 'POST':
-            return 'we here'
+            f = request.files['file']
+            if f and allowed_file(f.filename):
+                filename = secure_filename(f.filename)
+                f.save(os.path.join(app.config['UPLOAD_FOLDER1'], filename))
+                return jsonify('success')
+            return 'nah'
         else:
-            return 'you lost'
+            return jsonify('file upload failed')
     except Exception as e:
-        return jsonify({'error', str(e)})
+        return json.dumps({'error', str(e)})
 
 
-@app.route('/getProfilePhoto', methods='GET')
+@app.route('/getProfilePhoto', methods=['GET'])
 def get_profile_photo():
     try:
         if request.method == 'GET':
@@ -99,7 +127,7 @@ def get_profile_photo():
         return jsonify({'error', str(e)})
 
 
-@app.route('/search', methods='GET')
+@app.route('/search', methods=['GET'])
 def search_material():
     try:
         if request.method == 'GET':
@@ -108,6 +136,23 @@ def search_material():
             return 'you lost'
     except Exception as e:
         return jsonify({'error', str(e)})
+
+
+@app.route('/upload_material', methods=['POST'])
+def upload_material():
+    try:
+        if request.method == 'POST':
+
+            f = request.files['file']
+            if f and allowed_file(f.filename):
+                filename = secure_filename(f.filename)
+                f.save(os.path.join(app.config['UPLOAD_FOLDER2'], filename))
+                return jsonify('success')
+            return 'nah'
+        else:
+            return jsonify('file upload failed')
+    except Exception as e:
+        return json.dumps({'error', str(e)})
 
 
 if __name__ == "__main__":
