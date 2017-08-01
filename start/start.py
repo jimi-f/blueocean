@@ -1,9 +1,10 @@
 from flask import Flask, request, jsonify, render_template, session, g, redirect, url_for, abort, flash, json
 from flask_restful import Resource, Api, reqparse
 from flaskext.mysql import MySQL
-from flask_login import LoginManager, login_required, login_user, logout_user
+from flask_login import LoginManager, login_required, login_user, logout_user, UserMixin
 from contextlib import closing
 import os
+import uuid
 import mysql.connector
 from mysql.connector import Error
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -20,6 +21,10 @@ app.config['MYSQL_DATABASE_DB'] = 'aso_ebi'
 app.config['MYSQL_DATABASE_PORT'] = 3306
 mysql.init_app(app)
 
+
+os.urandom(24)
+app.secret_key = '\xfd{H\xe5<\x95\xf9\xe3\x96.5\xd1\x010<!\xd5\xa2\xa0\x9fr"\xa1\xa8'
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = '/login'
@@ -32,6 +37,22 @@ ALLOWED_EXTENSIONS = set(['png', 'jpg', 'jpeg'])
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1] in ALLOWED_EXTENSIONS
+
+
+class User():
+    def __init__(self, username, user_id, active=True):
+        self.username = username
+        self.user_id = user_id
+        self.active = active
+
+    def is_active(self):
+        return self.active
+
+    def is_anonymous(self):
+        return False
+
+    def is_authenticated(self):
+        return True
 
 
 @login_manager.user_loader
@@ -85,7 +106,9 @@ def login():
             data = cursor.fetchall()
             if len(data) > 0:
                 if check_password_hash(str(data[0][1]), password):
-                    login_user(username)
+                    session['user'] = data[0][0]
+                    # user = data[0][2]
+                    # login_user(user)
                     return jsonify('login confirmed')
                     cursor.close()
                     conn.close()
@@ -96,20 +119,43 @@ def login():
         else:
             return jsonify({'error: incorrect method'})
     except Exception as e:
-        print e
-        return jsonify({'error', str(e)})
+        return json.dumps({'error', str(e)})
+
+
+@app.route('/logout', methods=['POST'])
+# @login_required
+def logout():
+    session.pop('user', None)
+    return jsonify('logged out')
 
 
 @app.route('/UploadProfilePhoto', methods=['GET', 'POST'])
+# @login_required
 def upload_profile_photo():
     try:
         if request.method == 'POST':
-            f = request.files['file']
-            if f and allowed_file(f.filename):
-                filename = secure_filename(f.filename)
-                f.save(os.path.join(app.config['UPLOAD_FOLDER1'], filename))
-                return jsonify('success')
-            return 'nah'
+            if session.get('user'):
+                f = request.files['file']
+                if f and allowed_file(f.filename):
+                    extension = os.path.splitext(f.filename)[1]
+                    f_name = str(uuid.uuid4()) + session['user'] + extension
+                    # f_name = secure_filename(f.filename)
+                    # f.save(os.path.join(app.config['UPLOAD_FOLDER1'], f_name))
+                    name = session['user']
+                    conn = mysql.connect()
+                    cursor = conn.cursor()
+                    query = "UPDATE users SET profilePhoto = %s WHERE username = %s"
+                    args = (f_name, name)
+                    # print session['user']
+                    cursor.execute(query, args)
+                    data = cursor.fetchall()
+                    if len(data) is 0:
+                        conn.commit()
+                        f.save(os.path.join(app.config['UPLOAD_FOLDER1'], f_name))
+                        cursor.close()
+                        conn.close()
+                        return jsonify('success')
+                return 'nah'
         else:
             return jsonify('file upload failed')
     except Exception as e:
@@ -117,10 +163,21 @@ def upload_profile_photo():
 
 
 @app.route('/getProfilePhoto', methods=['GET'])
+# @login_required
 def get_profile_photo():
     try:
         if request.method == 'GET':
-            return 'we here'
+            if session.get('user'):
+                name = session['user']
+                conn = mysql.connect()
+                cursor = conn.cursor()
+                query = "SELECT profilePhoto FROM users WHERE username = %s"
+                args = name
+                cursor.execute(query, args)
+                data = cursor.fetchall()
+                if len(data) > 0:
+                    url = data[0][0]
+                    return jsonify(url)
         else:
             return 'you lost'
     except Exception as e:
@@ -128,6 +185,7 @@ def get_profile_photo():
 
 
 @app.route('/search', methods=['GET'])
+# @login_required
 def search_material():
     try:
         if request.method == 'GET':
@@ -139,6 +197,7 @@ def search_material():
 
 
 @app.route('/upload_material', methods=['POST'])
+# @login_required
 def upload_material():
     try:
         if request.method == 'POST':
