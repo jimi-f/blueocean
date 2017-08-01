@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, session, g, redirect, url_for, abort, flash, json
+from flask import Flask, request, jsonify, render_template, session, g, redirect, url_for, abort, flash, json, send_file
 from flask_restful import Resource, Api, reqparse
 from flaskext.mysql import MySQL
 from flask_login import LoginManager, login_required, login_user, logout_user, UserMixin
@@ -15,7 +15,7 @@ mysql = MySQL()
 app = Flask(__name__)
 
 app.config['MYSQL_DATABASE_USER'] = 'root'
-app.config['MYSQL_DATABASE_PASSWORD'] = 'jimi1310'
+app.config['MYSQL_DATABASE_PASSWORD'] = ''
 app.config['MYSQL_DATABASE_HOST'] = 'localhost'
 app.config['MYSQL_DATABASE_DB'] = 'aso_ebi'
 app.config['MYSQL_DATABASE_PORT'] = 3306
