@@ -177,7 +177,8 @@ def get_profile_photo():
                 data = cursor.fetchall()
                 if len(data) > 0:
                     url = data[0][0]
-                    return jsonify(url)
+                    photo = os.path.join(app.config['UPLOAD_FOLDER1'], url)
+                    return photo
         else:
             return 'you lost'
     except Exception as e:
