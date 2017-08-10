@@ -15,7 +15,7 @@ mysql = MySQL()
 app = Flask(__name__)
 
 app.config['MYSQL_DATABASE_USER'] = 'root'
-app.config['MYSQL_DATABASE_PASSWORD'] = ''
+app.config['MYSQL_DATABASE_PASSWORD'] = 'jimi1310'
 app.config['MYSQL_DATABASE_HOST'] = 'localhost'
 app.config['MYSQL_DATABASE_DB'] = 'aso_ebi'
 app.config['MYSQL_DATABASE_PORT'] = 3306
@@ -107,8 +107,6 @@ def login():
             if len(data) > 0:
                 if check_password_hash(str(data[0][1]), password):
                     session['user'] = data[0][0]
-                    # user = data[0][2]
-                    # login_user(user)
                     return jsonify('login confirmed')
                     cursor.close()
                     conn.close()
@@ -135,13 +133,12 @@ def upload_profile_photo():
     try:
         if request.method == 'POST':
             if session.get('user'):
+                name = session['user']
                 f = request.files['file']
                 if f and allowed_file(f.filename):
                     extension = os.path.splitext(f.filename)[1]
-                    f_name = str(uuid.uuid4()) + session['user'] + extension
+                    f_name = str(uuid.uuid4()) + name + extension
                     # f_name = secure_filename(f.filename)
-                    # f.save(os.path.join(app.config['UPLOAD_FOLDER1'], f_name))
-                    name = session['user']
                     conn = mysql.connect()
                     cursor = conn.cursor()
                     query = "UPDATE users SET profilePhoto = %s WHERE username = %s"
@@ -155,7 +152,7 @@ def upload_profile_photo():
                         cursor.close()
                         conn.close()
                         return jsonify('success')
-                return 'nah'
+                return jsonify('Error: Non-existent file or file type')
         else:
             return jsonify('file upload failed')
     except Exception as e:
@@ -180,7 +177,7 @@ def get_profile_photo():
                     photo = os.path.join(app.config['UPLOAD_FOLDER1'], url)
                     return photo
         else:
-            return 'you lost'
+            return jsonify('Error: Incorrect Method. Please use Get request')
     except Exception as e:
         return jsonify({'error', str(e)})
 
@@ -197,18 +194,36 @@ def search_material():
         return jsonify({'error', str(e)})
 
 
-@app.route('/upload_material', methods=['POST'])
+@app.route('/upload_material', methods=['GET', 'POST'])
 # @login_required
 def upload_material():
     try:
         if request.method == 'POST':
-
-            f = request.files['file']
-            if f and allowed_file(f.filename):
-                filename = secure_filename(f.filename)
-                f.save(os.path.join(app.config['UPLOAD_FOLDER2'], filename))
-                return jsonify('success')
-            return 'nah'
+            if session.get('user'):
+                username = session['user']
+                quantity = request.form.get('quantity')
+                colour = request.form.get('colour')
+                pattern = request.form.get('pattern')
+                name = request.form.get('name')
+                f = request.files['file']
+                if f and allowed_file(f.filename):
+                    extension = os.path.splitext(f.filename)[1]
+                    f_name = str(uuid.uuid4()) + username + extension
+                    # filename = secure_filename(f.filename)
+                    conn = mysql.connect()
+                    cursor = conn.cursor()
+                    query = "INSERT INTO materials (owner, quantity, colour, name, pattern, image)" \
+                            " VALUES (%s, %s, %s, %s, %s, %s) "
+                    args = (username, quantity, colour, name, pattern, f_name)
+                    cursor.execute(query, args)
+                    data = cursor.fetchall()
+                    if len(data) is 0:
+                        conn.commit()
+                        f.save(os.path.join(app.config['UPLOAD_FOLDER2'], f_name))
+                        cursor.close()
+                        conn.close()
+                        return jsonify('success')
+            return jsonify('Error: user not logged in')
         else:
             return jsonify('file upload failed')
     except Exception as e:
